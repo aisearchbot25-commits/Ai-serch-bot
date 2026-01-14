@@ -5,69 +5,61 @@ from flask import Flask
 from threading import Thread
 
 # --- CONFIGURATION ---
-TELEGRAM_TOKEN = '8455878492:AAHOvRNri-cTN7tqI4jb1Wvywv5yul0RcFU' # നിങ്ങളുടെ പുതിയ ടോക്കൺ
+TELEGRAM_TOKEN = '8455878492:AAHOvRNri-cTN7tqI4jb1Wvywv5yul0RcFU'
 GOOGLE_API_KEY = 'AIzaSyBdww3w_lvPXCnBmVe3FWc4yV-jtgfOxc4'
 SEARCH_ENGINE_ID = '2287c31f5b9174d59'
-GEMINI_API_KEY = 'AIzaSyAw_HK2uD1ZHLLk4OFutTaeAZPEy3bSjh0'
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is active!"
+    return "Price Bot is active!"
 
 def run_web_server():
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
-def get_web_info(query):
-    print(f"Searching web for: {query}")
+def get_prices(product_name):
+    # സെർച്ച് റിസൾട്ടിൽ വില വരാൻ 'price in India' എന്ന് ചേർക്കുന്നു
+    query = f"{product_name} price in Amazon Flipkart"
     url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={SEARCH_ENGINE_ID}&q={query}"
+    
     try:
         r = requests.get(url).json()
         if 'items' in r:
-            snippets = [f"{i['title']}: {i['snippet']}" for i in r['items'][:5]]
-            return "\n\n".join(snippets)
-        print("Google result: No items found. Check CSE settings.")
-        return ""
+            results = f"💰 **Price Results for: {product_name}**\n\n"
+            for i in r['items'][:5]:
+                title = i['title']
+                link = i['link']
+                # Snippet-ൽ നിന്ന് വില കണ്ടെത്താൻ ശ്രമിക്കുന്നു
+                snippet = i['snippet']
+                
+                results += f"📍 **{title}**\n📝 {snippet}\n🔗 [View Product]({link})\n\n"
+            return results
+        return "❌ വില വിവരങ്ങൾ കണ്ടെത്താനായില്ല."
     except Exception as e:
-        print(f"Google Error: {e}")
-        return ""
-
-def ask_gemini(query, context):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    prompt = f"User Question: {query}\n\nWeb Data:\n{context}\n\nAnswer in Malayalam based on the data."
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    try:
-        res = requests.post(url, headers=headers, json=payload).json()
-        return res['candidates'][0]['content']['parts'][0]['text']
-    except:
-        return "Gemini AI-ലേക്ക് കണക്ട് ചെയ്യാൻ പറ്റിയില്ല."
+        return f"⚠️ Error: {e}"
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "ഞാൻ റെഡിയാണ്! എന്താണ് നിങ്ങൾക്ക് അറിയേണ്ടത്?")
+    bot.reply_to(message, "സ്വാഗതം! ഏത് സാധനത്തിന്റെ വിലയാണ് അറിയേണ്ടത്? പേര് ടൈപ്പ് ചെയ്യൂ. (ഉദാ: iPhone 15)")
 
 @bot.message_handler(func=lambda message: True)
-def process(message):
-    query = message.text
-    msg = bot.reply_to(message, "തിരയുന്നു... 🔍")
+def handle_price_query(message):
+    product = message.text
+    status = bot.reply_to(message, "വിവിധ സൈറ്റുകളിൽ വില പരിശോധിക്കുന്നു... 🔍")
     
-    context = get_web_info(query)
-    if not context:
-        bot.edit_message_text("ക്ഷമിക്കണം, വെബ്സൈറ്റുകളിൽ നിന്ന് വിവരങ്ങൾ കണ്ടെത്താനായില്ല. ഗൂഗിൾ സെർച്ച് എൻജിൻ സെറ്റിങ്‌സ് ഒന്ന് പരിശോധിക്കൂ.", chat_id=message.chat.id, message_id=msg.message_id)
-        return
-
-    answer = ask_gemini(query, context)
+    price_info = get_prices(product)
+    
+    # മെസ്സേജ് അയക്കുന്നു (Markdown ഉപയോഗിച്ച് ലിങ്കുകൾ വർക്ക് ചെയ്യാൻ)
     try:
-        bot.edit_message_text(answer, chat_id=message.chat.id, message_id=msg.message_id)
+        bot.edit_message_text(price_info, chat_id=message.chat.id, message_id=status.message_id, parse_mode="Markdown", disable_web_page_preview=True)
     except:
-        bot.send_message(message.chat.id, answer)
+        bot.send_message(message.chat.id, price_info, parse_mode="Markdown")
 
 if __name__ == "__main__":
     Thread(target=run_web_server).start()
     bot.remove_webhook()
-    print("Bot is running...")
+    print("Price Tracker Bot is running...")
     bot.infinity_polling(skip_pending=True)
