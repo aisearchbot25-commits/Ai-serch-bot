@@ -1,82 +1,92 @@
 import telebot
 import requests
 import os
+import logging
 from flask import Flask
 from threading import Thread
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# --- CONFIGURATION ---
+# --- SETTINGS ---
 TELEGRAM_TOKEN = '8395098302:AAGXfH0zjBBylqUWyug-obrNINkbDS3S2F0'
 GOOGLE_API_KEY = 'AIzaSyBdww3w_lvPXCnBmVe3FWc4yV-jtgfOxc4'
 SEARCH_ENGINE_ID = '2287c31f5b9174d59'
+DEV_INSTAGRAM = "https://www.instagram.com/risham004?igsh=MTc2azZobHFsbm15Yw=="
 
+# Logging setup to track errors
+logging.basicConfig(level=logging.INFO)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Price Bot is active!"
+    return "Bot is Running Professionally!"
 
 def run_web_server():
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
-def get_prices(product_name):
-    # Search query optimized for English results
-    query = f"{product_name} price in Amazon Flipkart"
-    url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={SEARCH_ENGINE_ID}&q={query}"
+def get_professional_results(query):
+    # Search optimization
+    search_query = f"{query} price in India Amazon Flipkart"
+    url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={SEARCH_ENGINE_ID}&q={search_query}"
     
     try:
         r = requests.get(url).json()
         if 'items' in r:
-            results = f"💰 **Price Results for: {product_name}**\n\n"
-            for i in r['items'][:5]:
-                title = i['title']
-                link = i['link']
-                snippet = i['snippet']
-                results += f"📍 **{title}**\n📝 {snippet}\n🔗 [View Product]({link})\n\n"
-            return results
-        return "❌ No price information found for this product."
+            return r['items'][:4] # Top 4 results for clean look
+        return None
     except Exception as e:
-        return f"⚠️ Error: {e}"
+        logging.error(f"Search Error: {e}")
+        return None
 
-# --- HELP BUTTON ---
-def help_markup():
-    markup = InlineKeyboardMarkup()
-    help_button = InlineKeyboardButton("Contact Developer 👨‍💻", url="https://www.instagram.com/risham004?igsh=MTc2azZobHFsbm15Yw==")
-    markup.add(help_button)
+def create_keyboard(results=None, show_dev=True):
+    markup = InlineKeyboardMarkup(row_width=1)
+    if results:
+        for item in results:
+            # Clean title for button
+            btn_title = item['title'][:35] + "..."
+            markup.add(InlineKeyboardButton(text=f"🛒 {btn_title}", url=item['link']))
+    
+    if show_dev:
+        markup.add(InlineKeyboardButton(text="👨‍💻 Contact Developer", url=DEV_INSTAGRAM))
     return markup
 
 @bot.message_handler(commands=['start', 'help'])
-def welcome(message):
-    welcome_text = (
-        "Welcome to PriceTracker AI! 🛍️\n\n"
-        "Send me any product name to find the best prices and deals from online stores.\n\n"
-        "Example: 'iPhone 15' or 'Samsung S24'"
+def send_welcome(message):
+    welcome_msg = (
+        "✨ *Welcome to PriceTracker Pro* ✨\n\n"
+        "I can help you find the best prices from Amazon, Flipkart, and more.\n\n"
+        "💡 *Just send me a product name!*"
     )
-    bot.reply_to(message, welcome_text, reply_markup=help_markup())
+    bot.send_message(message.chat.id, welcome_msg, parse_mode="Markdown", reply_markup=create_keyboard())
 
 @bot.message_handler(func=lambda message: True)
-def handle_price_query(message):
-    product = message.text
-    status = bot.reply_to(message, "Searching for the best prices... 🔍")
+def handle_query(message):
+    query = message.text
+    temp_msg = bot.reply_to(message, "🔍 *Searching professional databases...*", parse_mode="Markdown")
     
-    price_info = get_prices(product)
+    results = get_professional_results(query)
     
-    try:
+    if results:
+        response_text = f"✅ *Found the best matches for:* _{query}_\n\nClick the buttons below to view products:"
         bot.edit_message_text(
-            price_info, 
-            chat_id=message.chat.id, 
-            message_id=status.message_id, 
-            parse_mode="Markdown", 
-            disable_web_page_preview=True,
-            reply_markup=help_markup()
+            chat_id=message.chat.id,
+            message_id=temp_msg.message_id,
+            text=response_text,
+            parse_mode="Markdown",
+            reply_markup=create_keyboard(results)
         )
-    except:
-        bot.send_message(message.chat.id, price_info, parse_mode="Markdown", reply_markup=help_markup())
+    else:
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=temp_msg.message_id,
+            text="❌ *Sorry, no matches found.*\nTry a different product name.",
+            parse_mode="Markdown",
+            reply_markup=create_keyboard()
+        )
 
 if __name__ == "__main__":
     Thread(target=run_web_server).start()
     bot.remove_webhook()
-    print("Price Tracker Bot is running in English...")
+    print("Professional Bot Started...")
     bot.infinity_polling(skip_pending=True)
