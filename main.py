@@ -6,7 +6,7 @@ from threading import Thread
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- CONFIGURATION ---
-TELEGRAM_TOKEN = '8455878492:AAHOvRNri-cTN7tqI4jb1Wvywv5yul0RcFU'
+TELEGRAM_TOKEN = '8395098302:AAGXfH0zjBBylqUWyug-obrNINkbDS3S2F0'
 GOOGLE_API_KEY = 'AIzaSyBdww3w_lvPXCnBmVe3FWc4yV-jtgfOxc4'
 SEARCH_ENGINE_ID = '2287c31f5b9174d59'
 
